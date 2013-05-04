@@ -11,6 +11,7 @@ function descriptor()
 end
 
 fd = nil
+prevStatus = 'unknown'
 
 function send_tcp_request(body)
   vlc.net.send(fd, body)
@@ -23,15 +24,46 @@ end
 
 function intf_handler(var, old, new, data)
   -- vlc.msg.dbg("intf_handler invoked.");
-  send_tcp_request("text:Nothing to report here. Over & Out.")
-  local data = vlc.net.recv(fd, 100)
-  if (data ~= nil) then
-    vlc.msg.dbg("DATA:" .. data)
-	local channel = vlc.osd.channel_register()
-	if (channel ~= nil) then
-	  vlc.osd.channel_clear(channel)
-	  vlc.osd.message(data, channel, 'bottom', 2000000)
+  -- send_tcp_request("text:Nothing to report here. Over & Out.")
+  local currStatus = vlc.playlist.status()
+  
+  if (currStatus ~= prevStatus) then
+    if (currStatus == 'playing') then
+	  send_tcp_request("playing:")
+	elseif (currStatus == 'paused') then
+	  send_tcp_request("paused:")
 	end
+	prevStatus = currStatus
+  end
+
+  local data = vlc.net.recv(fd, 100)
+  if (data == nil) then
+    return
+  end
+    
+  vlc.msg.dbg("DATA:" .. data)
+  local channel = vlc.osd.channel_register()
+  if (channel == nil) then
+    return
+  end
+  
+  offset = string.find(data, "text:")
+  if (offset == 1) then
+    local toShow = string.sub(data, 6)
+    vlc.osd.channel_clear(channel)
+    vlc.osd.message(toShow, channel, 'bottom', 2000000)
+  else
+    offset = string.find(data, "paused:")
+    if (offset == 1) then
+      if (prevStatus ~= 'paused') then
+	    vlc.playlist.pause()
+	  end
+    else
+	  offset = string.find(data, "playing:")
+      if (offset == 1) then
+	    vlc.playlist.pause()
+      end
+    end
   end
 end
 
